@@ -144,7 +144,7 @@ public class MatrixBlock extends MatrixValue implements CacheBlock, Externalizab
 	protected SparseBlock sparseBlock = null;
 	
 	//sparse-block-specific attributes (allocation only)
-	protected int estimatedNNzsPerRow = -1; 
+	protected int estimatedNNzsPerRow = -1;
 	
 	////////
 	// Matrix Constructors
@@ -470,7 +470,7 @@ public class MatrixBlock extends MatrixValue implements CacheBlock, Externalizab
 	public int getNumColumns() {
 		return clen;
 	}
-	
+
 	public void setNumColumns(int c) {
 		clen = c;
 	}
@@ -959,7 +959,7 @@ public class MatrixBlock extends MatrixValue implements CacheBlock, Externalizab
 	}
 	
 	public boolean isSparsePermutationMatrix() {
-		if( !isInSparseFormat() )
+		if( !isInSparseFormat() || nonZeros > rlen )
 			return false;
 		SparseBlock sblock = getSparseBlock();
 		boolean isPM = (sblock != null);
@@ -1040,8 +1040,9 @@ public class MatrixBlock extends MatrixValue implements CacheBlock, Externalizab
 		boolean sparseDst = evalSparseFormatInMemory(); 
 		
 		//check for empty blocks (e.g., sparse-sparse)
-		if( isEmptyBlock(false) )
+		if( isEmptyBlock(false) ) {
 			cleanupBlock(true, true);
+		}
 		
 		//change representation if required (also done for 
 		//empty blocks in order to set representation flags)
@@ -1644,7 +1645,6 @@ public class MatrixBlock extends MatrixValue implements CacheBlock, Externalizab
 		merge((MatrixBlock)that, appendOnly);
 	}
 
-	
 	/**
 	 * Merge disjoint: merges all non-zero values of the given input into the current
 	 * matrix block. Note that this method does NOT check for overlapping entries;

@@ -22,8 +22,8 @@ package org.apache.sysds.test.functions.codegen;
 import java.io.File;
 import java.util.HashMap;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.sysds.common.Types.ExecMode;
 import org.apache.sysds.hops.OptimizerUtils;
 import org.apache.sysds.lops.LopProperties.ExecType;
@@ -31,9 +31,12 @@ import org.apache.sysds.runtime.matrix.data.MatrixValue.CellIndex;
 import org.apache.sysds.test.AutomatedTestBase;
 import org.apache.sysds.test.TestConfiguration;
 import org.apache.sysds.test.TestUtils;
+import org.junit.Assert;
+import org.junit.Test;
 
 public class OuterProdTmplTest extends AutomatedTestBase 
 {
+	private static final Log LOG = LogFactory.getLog(OuterProdTmplTest.class.getName());
 	private static final String TEST_NAME1 = "wdivmm";
 	private static final String TEST_NAME2 = "wdivmmRight";
 	private static final String TEST_NAME3 = "wsigmoid";
@@ -227,8 +230,8 @@ public class OuterProdTmplTest extends AutomatedTestBase
 			runRScript(true);
 			
 			//compare matrices 
-			HashMap<CellIndex, Double> dmlfile = readDMLMatrixFromHDFS("S");
-			HashMap<CellIndex, Double> rfile  = readRMatrixFromFS("S");
+			HashMap<CellIndex, Double> dmlfile = readDMLMatrixFromOutputDir("S");
+			HashMap<CellIndex, Double> rfile  = readRMatrixFromExpectedDir("S");
 			TestUtils.compareMatrices(dmlfile, rfile, eps, "Stat-DML", "Stat-R");
 			
 			if( testname.equals(TEST_NAME8) )
@@ -277,14 +280,14 @@ public class OuterProdTmplTest extends AutomatedTestBase
 			
 			if(testname.equals(TEST_NAME4)) { //wcemm
 				//compare scalars 
-				HashMap<CellIndex, Double> dmlfile = readDMLScalarFromHDFS("S");
-				HashMap<CellIndex, Double> rfile  = readRScalarFromFS("S");
+				HashMap<CellIndex, Double> dmlfile = readDMLScalarFromOutputDir("S");
+				HashMap<CellIndex, Double> rfile  = readRScalarFromExpectedDir("S");
 				TestUtils.compareScalars((Double) dmlfile.values().toArray()[0], (Double) rfile.values().toArray()[0],0.0001);
 			}
 			else {
 				//compare matrices 
-				HashMap<CellIndex, Double> dmlfile = readDMLMatrixFromHDFS("S");
-				HashMap<CellIndex, Double> rfile  = readRMatrixFromFS("S");
+				HashMap<CellIndex, Double> dmlfile = readDMLMatrixFromOutputDir("S");
+				HashMap<CellIndex, Double> rfile  = readRMatrixFromExpectedDir("S");
 				TestUtils.compareMatrices(dmlfile, rfile, eps, "Stat-DML", "Stat-R");
 			}
 			
@@ -310,7 +313,7 @@ public class OuterProdTmplTest extends AutomatedTestBase
 	@Override
 	protected File getConfigTemplateFile() {
 		// Instrumentation in this test's output log to show custom configuration file used for template.
-		System.out.println("This test case overrides default configuration with " + TEST_CONF_FILE.getPath());
+		LOG.info("This test case overrides default configuration with " + TEST_CONF_FILE.getPath());
 		return TEST_CONF_FILE;
 	}
 }

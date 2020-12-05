@@ -39,15 +39,19 @@ import org.apache.sysds.common.Types.ReturnType;
 public enum Builtins {
 	//builtin functions
 	ABS("abs", false),
+	GET_ACCURACY("getAccuracy", true),
+	ABSTAIN("abstain", true),
 	ACOS("acos", false),
-	ALS_CG("als_cg", true),
-	ALS_DS("als_ds", true),
+	ALS("als", true),
+	ALS_CG("alsCG", true),
+	ALS_DS("alsDS", true),
 	ASIN("asin", false),
 	ATAN("atan", false),
 	AVG_POOL("avg_pool", false),
 	AVG_POOL_BACKWARD("avg_pool_backward", false),
 	BATCH_NORM2D("batch_norm2d", false, ReturnType.MULTI_RETURN),
 	BATCH_NORM2D_BACKWARD("batch_norm2d_backward", false, ReturnType.MULTI_RETURN),
+	BANDIT("bandit", true),
 	BIASADD("bias_add", false),
 	BIASMULT("bias_multiply", false),
 	BITWAND("bitwAnd", false),
@@ -55,6 +59,7 @@ public enum Builtins {
 	BITWXOR("bitwXor", false),
 	BITWSHIFTL("bitwShiftL", false),
 	BITWSHIFTR("bitwShiftR", false),
+	BIVAR("bivar", true),
 	CAST_AS_SCALAR("as.scalar", "castAsScalar", false),
 	CAST_AS_MATRIX("as.matrix", false),
 	CAST_AS_FRAME("as.frame", false),
@@ -99,6 +104,8 @@ public enum Builtins {
 	EXP("exp", false),
 	EVAL("eval", false),
 	FLOOR("floor", false),
+	FRAME_SORT("frameSort", true),
+	GET_PERMUTATIONS("getPermutations", true),
 	GLM("glm", true),
 	GMM("gmm", true),
 	GNMF("gnmf", true),
@@ -107,6 +114,8 @@ public enum Builtins {
 	IFELSE("ifelse", false),
 	IMG_MIRROR("img_mirror", true),
 	IMG_BRIGHTNESS("img_brightness", true),
+	IMPUTE_BY_MEAN("imputeByMean", true),
+	IMPUTE_BY_MEDIAN("imputeByMedian", true),
 	IMG_CROP("img_crop", true),
 	IMPUTE_FD("imputeByFD", true),
 	INTERQUANTILE("interQuantile", false),
@@ -117,7 +126,9 @@ public enum Builtins {
 	ISNAN("is.nan", false),
 	ISINF("is.infinite", false),
 	KMEANS("kmeans", true),
+	KMEANSPREDICT("kmeansPredict", true),
 	L2SVM("l2svm", true),
+	LASSO("lasso", true),
 	LENGTH("length", false),
 	LINEAGE("lineage", false),
 	LIST("list", false),  //note: builtin and parbuiltin
@@ -126,6 +137,7 @@ public enum Builtins {
 	LMDS("lmDS", true),
 	LMPREDICT("lmpredict", true),
 	LOG("log", false),
+	LOGSUMEXP("logSumExp", true),
 	LSTM("lstm", false, ReturnType.MULTI_RETURN),
 	LSTM_BACKWARD("lstm_backward", false, ReturnType.MULTI_RETURN),
 	LU("lu", false, ReturnType.MULTI_RETURN),
@@ -153,6 +165,7 @@ public enum Builtins {
 	OUTLIER_IQR("outlierByIQR", true),
 	PCA("pca", true),
 	PNMF("pnmf", true),
+	PPCA("ppca", true),
 	PPRED("ppred", false),
 	PROD("prod", false),
 	QR("qr", false, ReturnType.MULTI_RETURN),
@@ -182,6 +195,7 @@ public enum Builtins {
 	SLICEFINDER("slicefinder", true),
 	SMOTE("smote", true),
 	SOLVE("solve", false),
+	SPLIT("split", true),
 	SQRT("sqrt", false),
 	SUM("sum", false),
 	SVD("svd", false, ReturnType.MULTI_RETURN),
@@ -195,6 +209,7 @@ public enum Builtins {
 	COUNT_DISTINCT("countDistinct",false),
 	COUNT_DISTINCT_APPROX("countDistinctApprox",false),
 	VAR("var", false),
+	VECTOR_TO_CSV("vectorToCsv", true),
 	XOR("xor", false),
 	UNIVAR("univar", true),
 	WINSORIZE("winsorize", true, false), //TODO parameterize w/ prob, min/max val
@@ -228,7 +243,9 @@ public enum Builtins {
 	TRANSFORMDECODE("transformdecode", false, true),
 	TRANSFORMENCODE("transformencode", false, true),
 	TRANSFORMMETA("transformmeta", false, true),
-	UPPER_TRI("upper.tri", false, true);
+	UPPER_TRI("upper.tri", false, true),
+	XDUMMY1("xdummy1", true), //error handling test
+	XDUMMY2("xdummy2", true); //error handling test
 
 	Builtins(String name, boolean script) {
 		this(name, null, script, false, ReturnType.SINGLE_RETURN);

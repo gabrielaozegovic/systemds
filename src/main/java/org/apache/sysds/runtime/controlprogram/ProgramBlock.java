@@ -32,6 +32,7 @@ import org.apache.sysds.parser.ParseInfo;
 import org.apache.sysds.parser.StatementBlock;
 import org.apache.sysds.runtime.DMLRuntimeException;
 import org.apache.sysds.runtime.DMLScriptException;
+import org.apache.sysds.runtime.controlprogram.caching.CacheableData;
 import org.apache.sysds.runtime.controlprogram.caching.MatrixObject;
 import org.apache.sysds.runtime.controlprogram.caching.MatrixObject.UpdateType;
 import org.apache.sysds.runtime.controlprogram.context.ExecutionContext;
@@ -45,6 +46,7 @@ import org.apache.sysds.runtime.instructions.cp.StringObject;
 import org.apache.sysds.runtime.lineage.LineageCache;
 import org.apache.sysds.runtime.lineage.LineageCacheConfig.ReuseCacheType;
 import org.apache.sysds.runtime.matrix.data.MatrixBlock;
+import org.apache.sysds.runtime.privacy.propagation.PrivacyPropagator;
 import org.apache.sysds.utils.Statistics;
 
 import java.util.ArrayList;
@@ -55,7 +57,7 @@ public abstract class ProgramBlock implements ParseInfo
 	public static final String PRED_VAR = "__pred";
 	
 	protected static final Log LOG = LogFactory.getLog(ProgramBlock.class.getName());
-	private static final boolean CHECK_MATRIX_SPARSITY = false;
+	private static final boolean CHECK_MATRIX_PROPERTIES = false;
 
 	protected Program _prog; // pointer to Program this ProgramBlock is part of
 	
@@ -242,7 +244,7 @@ public abstract class ProgramBlock implements ParseInfo
 			
 			// try to reuse instruction result from lineage cache
 			if( !LineageCache.reuse(tmp, ec) ) {
-				long et0 = !ReuseCacheType.isNone() ? System.nanoTime() : 0;
+				long et0 = (!ReuseCacheType.isNone() || DMLScript.LINEAGE_ESTIMATE) ? System.nanoTime() : 0;
 				
 				// process actual instruction
 				tmp.processInstruction(ec);
@@ -260,6 +262,9 @@ public abstract class ProgramBlock implements ParseInfo
 				}
 			}
 
+			// propagate input privacy constraints to output
+			PrivacyPropagator.postProcessInstruction(tmp, ec);
+
 			// optional trace information (instruction and runtime)
 			if( LOG.isTraceEnabled() ) {
 				long t1 = System.nanoTime();
@@ -269,8 +274,9 @@ public abstract class ProgramBlock implements ParseInfo
 
 			// optional check for correct nnz and sparse/dense representation of all
 			// variables in symbol table (for tracking source of wrong representation)
-			if( CHECK_MATRIX_SPARSITY ) {
+			if( CHECK_MATRIX_PROPERTIES ) {
 				checkSparsity( tmp, ec.getVariables() );
+				checkFederated( tmp, ec.getVariables() );
 			}
 		}
 		catch (DMLScriptException e){
@@ -328,14 +334,11 @@ public abstract class ProgramBlock implements ParseInfo
 	
 	private static void checkSparsity( Instruction lastInst, LocalVariableMap vars )
 	{
-		for( String varname : vars.keySet() )
-		{
+		for( String varname : vars.keySet() ) {
 			Data dat = vars.get(varname);
-			if( dat instanceof MatrixObject )
-			{
+			if( dat instanceof MatrixObject ) {
 				MatrixObject mo = (MatrixObject)dat;
-				if( mo.isDirty() && !mo.isPartitioned() )
-				{
+				if( mo.isDirty() && !mo.isPartitioned() ) {
 					MatrixBlock mb = mo.acquireRead();
 					boolean sparse1 = mb.isInSparseFormat();
 					long nnz1 = mb.getNonZeros();
@@ -364,6 +367,21 @@ public abstract class ProgramBlock implements ParseInfo
 		}
 	}
 
+	private static void checkFederated( Instruction lastInst, LocalVariableMap vars )
+	{
+		for( String varname : vars.keySet() ) {
+			Data dat = vars.get(varname);
+			if( !(dat instanceof CacheableData) )
+				continue;
+			
+			CacheableData<?> mo = (CacheableData<?>)dat;
+			if( mo.isFederated() ) {
+				if( mo.getFedMapping().getFedMapping().isEmpty() )
+					throw new DMLRuntimeException("Invalid empty FederationMap for: "+mo);
+			}
+		}
+	}
+	
 	///////////////////////////////////////////////////////////////////////////
 	// store position information for program blocks
 	///////////////////////////////////////////////////////////////////////////

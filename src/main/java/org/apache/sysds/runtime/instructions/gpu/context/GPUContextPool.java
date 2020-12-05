@@ -83,6 +83,8 @@ public class GPUContextPool {
 	 * All these need be done once, and not per GPU
 	 */
 	public synchronized static void initializeGPU() {
+		if (initialized)
+			return;
 		initialized = true;
 		GPUContext.LOG.info("Initializing CUDA");
 		long start = System.nanoTime();
@@ -210,8 +212,7 @@ public class GPUContextPool {
 	public static synchronized List<GPUContext> reserveAllGPUContexts() {
 		if (reserved)
 			throw new DMLRuntimeException("Trying to re-reserve GPUs");
-		if (!initialized)
-			initializeGPU();
+		initializeGPU();
 		reserved = true;
 		LOG.trace("GPU : Reserved all GPUs");
 		return pool;

@@ -25,6 +25,7 @@ import org.apache.sysds.runtime.data.DenseBlock;
 import org.apache.sysds.runtime.data.DenseBlockFactory;
 import org.apache.sysds.runtime.data.SparseBlock;
 import org.apache.sysds.runtime.data.SparseBlockCSR;
+import org.apache.sysds.runtime.data.SparseRowVector;
 import org.apache.sysds.runtime.functionobjects.DiagIndex;
 import org.apache.sysds.runtime.functionobjects.RevIndex;
 import org.apache.sysds.runtime.functionobjects.SortIndex;
@@ -819,8 +820,8 @@ public class LibMatrixReorg
 		
 		if( out.rlen == 1 ) //VECTOR-VECTOR
 		{
-			c.allocate(0, (int)in.nonZeros); 
-			c.setIndexRange(0, 0, m, a.valuesAt(0), 0, m);
+			//allocate row once by nnz, copy non-zeros
+			c.set(0, new SparseRowVector((int)in.nonZeros, a.valuesAt(0), m), false);
 		}
 		else //general case: MATRIX-MATRIX
 		{
@@ -1057,16 +1058,27 @@ public class LibMatrixReorg
 		if( out.sparse  ) { //SPARSE
 			if( SPARSE_OUTPUTS_IN_CSR ) {
 				int[] rptr = new int[in.rlen+1];
-				int[] cix = new int[(int)in.nonZeros];
-				double[] vals = new double[(int)in.nonZeros];
-				for( int i=0, pos=0; i<rlen; i++ ) {
-					double val = in.quickGetValue(i, 0);
-					if( val != 0 ) {
-						cix[pos] = i;
-						vals[pos] = val;
-						pos++;
+				int[] cix = null;
+				double[] vals = null;
+				//case a: fully dense vector
+				if( rlen == in.nonZeros && !in.sparse ) {
+					//reuse single seq for rptr and cix (cix truncated by 1)
+					rptr = cix = UtilFunctions.getSeqArray(0, rlen, 1);
+					vals = in.getDenseBlockValues(); //shallow copy
+				}
+				//case b: more general input
+				else {
+					cix = new int[(int)in.nonZeros];
+					vals = new double[(int)in.nonZeros];
+					for( int i=0, pos=0; i<rlen; i++ ) {
+						double val = in.quickGetValue(i, 0);
+						if( val != 0 ) {
+							cix[pos] = i;
+							vals[pos] = val;
+							pos++;
+						}
+						rptr[i+1]=pos;
 					}
-					rptr[i+1]=pos;
 				}
 				out.sparseBlock = new SparseBlockCSR(
 					rptr, cix, vals, (int)in.nonZeros);

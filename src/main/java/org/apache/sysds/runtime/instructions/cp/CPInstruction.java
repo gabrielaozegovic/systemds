@@ -30,7 +30,7 @@ import org.apache.sysds.runtime.instructions.CPInstructionParser;
 import org.apache.sysds.runtime.instructions.Instruction;
 import org.apache.sysds.runtime.instructions.fed.FEDInstructionUtils;
 import org.apache.sysds.runtime.matrix.operators.Operator;
-import org.apache.sysds.runtime.privacy.PrivacyPropagator;
+import org.apache.sysds.runtime.privacy.propagation.PrivacyPropagator;
 
 public abstract class CPInstruction extends Instruction 
 {
@@ -39,7 +39,7 @@ public abstract class CPInstruction extends Instruction
 		Unary, Binary, Ternary, Quaternary, BuiltinNary, Ctable,
 		MultiReturnParameterizedBuiltin, ParameterizedBuiltin, MultiReturnBuiltin,
 		Builtin, Reorg, Variable, FCall, Append, Rand, QSort, QPick,
-		MatrixIndexing, MMTSJ, PMMJ, MMChain, Reshape, Partition, Compression, SpoofFused,
+		MatrixIndexing, MMTSJ, PMMJ, MMChain, Reshape, Partition, Compression, DeCompression, SpoofFused,
 		StringInit, CentralMoment, Covariance, UaggOuterChain, Dnn, Sql }
 
 	protected final CPType _cptype;

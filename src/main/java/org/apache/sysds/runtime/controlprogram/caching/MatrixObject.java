@@ -40,8 +40,12 @@ import org.apache.sysds.runtime.controlprogram.context.SparkExecutionContext;
 import org.apache.sysds.runtime.controlprogram.federated.FederatedRange;
 import org.apache.sysds.runtime.controlprogram.federated.FederatedResponse;
 import org.apache.sysds.runtime.controlprogram.federated.FederationMap;
+import org.apache.sysds.runtime.instructions.fed.InitFEDInstruction;
 import org.apache.sysds.runtime.instructions.spark.data.RDDObject;
 import org.apache.sysds.runtime.io.FileFormatProperties;
+import org.apache.sysds.runtime.io.ReaderWriterFederated;
+import org.apache.sysds.runtime.lineage.LineageItem;
+import org.apache.sysds.runtime.lineage.LineageRecomputeUtils;
 import org.apache.sysds.runtime.matrix.data.MatrixBlock;
 import org.apache.sysds.runtime.meta.DataCharacteristics;
 import org.apache.sysds.runtime.meta.MatrixCharacteristics;
@@ -64,7 +68,7 @@ import org.apache.sysds.runtime.util.IndexRange;
 public class MatrixObject extends CacheableData<MatrixBlock>
 {
 	private static final long serialVersionUID = 6374712373206495637L;
-	
+
 	public enum UpdateType {
 		COPY,
 		INPLACE,
@@ -85,7 +89,7 @@ public class MatrixObject extends CacheableData<MatrixBlock>
 	private int _partitionSize = -1; //indicates n for BLOCKWISE_N
 	private String _partitionCacheName = null; //name of cache block
 	private MatrixBlock _partitionInMemory = null;
-	
+
 	/**
 	 * Constructor that takes the value type and the HDFS filename.
 	 * 
@@ -109,6 +113,23 @@ public class MatrixObject extends CacheableData<MatrixBlock>
 		_hdfsFileName = file;
 		_cache = null;
 		_data = null;
+	}
+
+	/**
+	 * Constructor that takes the value type, HDFS filename and associated metadata and a MatrixBlock
+	 * used for creation after serialization
+	 *
+	 * @param vt value type
+	 * @param file file name
+	 * @param mtd metadata
+	 * @param data matrix block data
+	 */
+	public MatrixObject( ValueType vt, String file, MetaData mtd, MatrixBlock data) {
+		super (DataType.MATRIX, vt);
+		_metaData = mtd;
+		_hdfsFileName = file;
+		_cache = null;
+		_data = data;
 	}
 	
 	/**
@@ -415,6 +436,7 @@ public class MatrixObject extends CacheableData<MatrixBlock>
 	}
 	
 
+	
 	@Override
 	protected MatrixBlock readBlobFromHDFS(String fname, long[] dims)
 		throws IOException
@@ -430,11 +452,23 @@ public class MatrixObject extends CacheableData<MatrixBlock>
 					+ ", dimensions: [" + mc.getRows() + ", " + mc.getCols() + ", " + mc.getNonZeros() + "]");
 			begin = System.currentTimeMillis();
 		}
-		
-		//read matrix and maintain meta data
+
+		// If the file format is Federated use the federated reader.
+		if(iimd.getFileFormat() == FileFormat.FEDERATED){
+			InitFEDInstruction.federateMatrix(this, ReaderWriterFederated.read(fname,mc));
+		}
+
+		// Read matrix and maintain meta data, 
+		// if the MatrixObject is federated there is nothing extra to read, and therefore only acquire read and release
 		MatrixBlock newData = isFederated() ? acquireReadAndRelease() :
 			DataConverter.readMatrixFromHDFS(fname, iimd.getFileFormat(), rlen,
 			clen, mc.getBlocksize(), mc.getNonZeros(), getFileFormatProperties());
+		
+		if(iimd.getFileFormat() == FileFormat.CSV){
+			_metaData = _metaData instanceof MetaDataFormat ?
+				new MetaDataFormat(newData.getDataCharacteristics(), iimd.getFileFormat()) :
+				new MetaData(newData.getDataCharacteristics());
+		}
 		
 		setHDFSFileExists(true);
 		
@@ -551,7 +585,10 @@ public class MatrixObject extends CacheableData<MatrixBlock>
 		
 		MetaDataFormat iimd = (MetaDataFormat) _metaData;
 
-		if (_data != null)
+		if(this.isFederated() &&  FileFormat.safeValueOf(ofmt) == FileFormat.FEDERATED){
+			ReaderWriterFederated.write(fname,this._fedMapping);
+		}
+		else if (_data != null)
 		{
 			// Get the dimension information from the metadata stored within MatrixObject
 			DataCharacteristics mc = iimd.getDataCharacteristics();
@@ -593,5 +630,12 @@ public class MatrixObject extends CacheableData<MatrixBlock>
 		//lazy evaluation of pending transformations.
 		long newnnz = SparkExecutionContext.writeMatrixRDDtoHDFS(rdd, fname, fmt);
 		_metaData.getDataCharacteristics().setNonZeros(newnnz);
+	}
+	
+	@Override
+	protected MatrixBlock reconstructByLineage(LineageItem li) throws IOException {
+		return ((MatrixObject) LineageRecomputeUtils
+			.parseNComputeLineageTrace(li.getData(), null))
+			.acquireReadAndRelease();
 	}
 }

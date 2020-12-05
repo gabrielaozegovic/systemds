@@ -40,6 +40,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.sysds.hops.OptimizerUtils;
 import org.apache.sysds.hops.codegen.SpoofCompiler.CompilerType;
+import org.apache.sysds.hops.codegen.SpoofCompiler.GeneratorAPI;
 import org.apache.sysds.hops.codegen.SpoofCompiler.PlanSelector;
 import org.apache.sysds.lops.Compression;
 import org.apache.sysds.parser.ParseException;
@@ -66,12 +67,13 @@ public class DMLConfig
 	public static final String DEFAULT_BLOCK_SIZE   = "sysds.defaultblocksize";
 	public static final String CP_PARALLEL_OPS      = "sysds.cp.parallel.ops";
 	public static final String CP_PARALLEL_IO       = "sysds.cp.parallel.io";
-	public static final String COMPRESSED_LINALG    = "sysds.compressed.linalg"; //auto, true, false
+	public static final String COMPRESSED_LINALG    = "sysds.compressed.linalg"; //auto, cost, true, false
 	public static final String COMPRESSED_LOSSY     = "sysds.compressed.lossy";
 	public static final String COMPRESSED_VALID_COMPRESSIONS = "sysds.compressed.valid.compressions";
 	public static final String NATIVE_BLAS          = "sysds.native.blas";
 	public static final String NATIVE_BLAS_DIR      = "sysds.native.blas.directory";
 	public static final String CODEGEN              = "sysds.codegen.enabled"; //boolean
+	public static final String CODEGEN_API          = "sysds.codegen.api"; // see SpoofCompiler.API
 	public static final String CODEGEN_COMPILER     = "sysds.codegen.compiler"; //see SpoofCompiler.CompilerType
 	public static final String CODEGEN_OPTIMIZER    = "sysds.codegen.optimizer"; //see SpoofCompiler.PlanSelector
 	public static final String CODEGEN_PLANCACHE    = "sysds.codegen.plancache"; //boolean
@@ -91,6 +93,8 @@ public class DMLConfig
 	public static final String PRINT_GPU_MEMORY_INFO = "sysds.gpu.print.memoryInfo";
 	public static final String EVICTION_SHADOW_BUFFERSIZE = "sysds.gpu.eviction.shadow.bufferSize";
 
+	public static final String USE_SSL_FEDERATED_COMMUNICATION = "sysds.federated.ssl"; // boolean
+	public static final String DEFAULT_FEDERATED_INITIALIZATION_TIMEOUT = "sysds.federated.initialization.timeout"; // int seconds
 	public static final int DEFAULT_FEDERATED_PORT = 4040; // borrowed default Spark Port
 	public static final int DEFAULT_NUMBER_OF_FEDERATED_WORKER_THREADS = 2;
 	
@@ -118,6 +122,7 @@ public class DMLConfig
 		_defaultVals.put(COMPRESSED_LOSSY,       "false" );
 		_defaultVals.put(COMPRESSED_VALID_COMPRESSIONS, "DDC,OLE,RLE");
 		_defaultVals.put(CODEGEN,                "false" );
+		_defaultVals.put(CODEGEN_API,		     GeneratorAPI.JAVA.name() );
 		_defaultVals.put(CODEGEN_COMPILER,       CompilerType.AUTO.name() );
 		_defaultVals.put(CODEGEN_OPTIMIZER,      PlanSelector.FUSE_COST_BASED_V2.name() );
 		_defaultVals.put(CODEGEN_PLANCACHE,      "true" );
@@ -135,6 +140,8 @@ public class DMLConfig
 		_defaultVals.put(SYNCHRONIZE_GPU,        "false" );
 		_defaultVals.put(EAGER_CUDA_FREE,        "false" );
 		_defaultVals.put(FLOATING_POINT_PRECISION, "double" );
+		_defaultVals.put(USE_SSL_FEDERATED_COMMUNICATION, "false");
+		_defaultVals.put(DEFAULT_FEDERATED_INITIALIZATION_TIMEOUT, "10");
 	}
 	
 	public DMLConfig() {
@@ -379,10 +386,11 @@ public class DMLConfig
 			LOCAL_TMP_DIR,SCRATCH_SPACE,OPTIMIZATION_LEVEL, DEFAULT_BLOCK_SIZE,
 			CP_PARALLEL_OPS, CP_PARALLEL_IO, NATIVE_BLAS, NATIVE_BLAS_DIR,
 			COMPRESSED_LINALG, COMPRESSED_LOSSY, COMPRESSED_VALID_COMPRESSIONS,
-			CODEGEN, CODEGEN_COMPILER, CODEGEN_OPTIMIZER, CODEGEN_PLANCACHE, CODEGEN_LITERALS,
+			CODEGEN, CODEGEN_API, CODEGEN_COMPILER, CODEGEN_OPTIMIZER, CODEGEN_PLANCACHE, CODEGEN_LITERALS,
 			STATS_MAX_WRAP_LEN, PRINT_GPU_MEMORY_INFO,
 			AVAILABLE_GPUS, SYNCHRONIZE_GPU, EAGER_CUDA_FREE, FLOATING_POINT_PRECISION, GPU_EVICTION_POLICY, 
-			LOCAL_SPARK_NUM_THREADS, EVICTION_SHADOW_BUFFERSIZE, GPU_MEMORY_ALLOCATOR, GPU_MEMORY_UTILIZATION_FACTOR
+			LOCAL_SPARK_NUM_THREADS, EVICTION_SHADOW_BUFFERSIZE, GPU_MEMORY_ALLOCATOR, GPU_MEMORY_UTILIZATION_FACTOR,
+			USE_SSL_FEDERATED_COMMUNICATION, DEFAULT_FEDERATED_INITIALIZATION_TIMEOUT
 		}; 
 		
 		StringBuilder sb = new StringBuilder();

@@ -22,13 +22,14 @@ package org.apache.sysds.runtime.instructions.fed;
 import org.apache.sysds.runtime.controlprogram.context.ExecutionContext;
 import org.apache.sysds.runtime.instructions.Instruction;
 import org.apache.sysds.runtime.matrix.operators.Operator;
-import org.apache.sysds.runtime.privacy.PrivacyPropagator;
+import org.apache.sysds.runtime.privacy.propagation.PrivacyPropagator;
 
 public abstract class FEDInstruction extends Instruction {
 	
 	public enum FEDType {
 		AggregateBinary,
 		AggregateUnary,
+		AggregateTernary,
 		Append,
 		Binary,
 		Init,
@@ -37,6 +38,9 @@ public abstract class FEDInstruction extends Instruction {
 		Tsmm,
 		MMChain,
 		Reorg,
+		MatrixIndexing,
+		QSort,
+		QPick
 	}
 	
 	protected final FEDType _fedType;

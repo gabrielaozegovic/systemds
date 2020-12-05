@@ -154,6 +154,9 @@ public class LineageCache
 	public static boolean reuse(List<String> outNames, List<DataIdentifier> outParams, 
 			int numOutputs, LineageItem[] liInputs, String name, ExecutionContext ec)
 	{
+		if (DMLScript.LINEAGE_ESTIMATE && !name.startsWith("SB"))
+			LineageEstimator.stopEstimator(outParams, liInputs, name);
+		
 		if( !LineageCacheConfig.isMultiLevelReuse())
 			return false;
 		
@@ -163,6 +166,9 @@ public class LineageCache
 		for (int i=0; i<numOutputs; i++) {
 			String opcode = name + String.valueOf(i+1);
 			LineageItem li = new LineageItem(opcode, liInputs);
+			// set _distLeaf2Node for this special lineage item to 1
+			// to save it from early eviction if DAGHEIGHT policy is selected
+			li.setDistLeaf2Node(1);
 			LineageCacheEntry e = null;
 			synchronized(_cache) {
 				if (LineageCache.probe(li)) {
@@ -222,7 +228,7 @@ public class LineageCache
 	public static boolean probe(LineageItem key) {
 		//TODO problematic as after probe the matrix might be kicked out of cache
 		boolean p = _cache.containsKey(key);  // in cache or in disk
-		if (!p && DMLScript.STATISTICS && LineageCacheEviction._removelist.contains(key))
+		if (!p && DMLScript.STATISTICS && LineageCacheEviction._removelist.containsKey(key))
 			// The sought entry was in cache but removed later 
 			LineageCacheStatistics.incrementDelHits();
 		return p;
@@ -250,6 +256,10 @@ public class LineageCache
 	}
 	
 	public static void putValue(Instruction inst, ExecutionContext ec, long starttime) {
+		if (DMLScript.LINEAGE_ESTIMATE)
+			//forward to estimator
+			LineageEstimator.processSingleInst(inst, ec, starttime);
+
 		if (ReuseCacheType.isNone())
 			return;
 		long computetime = System.nanoTime() - starttime;
@@ -274,18 +284,18 @@ public class LineageCache
 					LineageItem item = entry.getKey();
 					Data data = entry.getValue();
 					LineageCacheEntry centry = _cache.get(item);
-					if (data instanceof MatrixObject)
-						centry.setValue(((MatrixObject)data).acquireReadAndRelease(), computetime);
-					else if (data instanceof ScalarObject)
-						centry.setValue((ScalarObject)data, computetime);
-					else {
+
+					if (!(data instanceof MatrixObject) && !(data instanceof ScalarObject)) {
 						// Reusable instructions can return a frame (rightIndex). Remove placeholders.
 						_cache.remove(item);
 						continue;
 					}
 
-					long size = centry.getSize();
-					//remove the entry if the entry is bigger than the cache.
+					MatrixBlock mb = (data instanceof MatrixObject) ? 
+							((MatrixObject)data).acquireReadAndRelease() : null;
+					long size = mb != null ? mb.getInMemorySize() : ((ScalarObject)data).getSize();
+
+					//remove the placeholder if the entry is bigger than the cache.
 					//FIXME: the resumed threads will enter into infinite wait as the entry
 					//is removed. Need to add support for graceful remove (placeholder) and resume.
 					if (size > LineageCacheEviction.getCacheLimit()) {
@@ -293,12 +303,24 @@ public class LineageCache
 						continue; 
 					}
 
-					//maintain order for eviction
-					LineageCacheEviction.addEntry(centry);
-
+					//make space for the data
 					if (!LineageCacheEviction.isBelowThreshold(size))
 						LineageCacheEviction.makeSpace(_cache, size);
 					LineageCacheEviction.updateSize(size, true);
+
+					//place the data
+					if (data instanceof MatrixObject)
+						centry.setValue(mb, computetime);
+					else if (data instanceof ScalarObject)
+						centry.setValue((ScalarObject)data, computetime);
+
+					if (DMLScript.STATISTICS && LineageCacheEviction._removelist.containsKey(centry._key)) {
+						// Add to missed compute time
+						LineageCacheStatistics.incrementMissedComputeTime(centry._computeTime);
+					}
+
+					//maintain order for eviction
+					LineageCacheEviction.addEntry(centry);
 				}
 			}
 		}
@@ -307,6 +329,10 @@ public class LineageCache
 	public static void putValue(List<DataIdentifier> outputs,
 		LineageItem[] liInputs, String name, ExecutionContext ec, long computetime)
 	{
+		if (LineageCacheConfig.isEstimator())
+			//forward to estimator
+			LineageEstimator.processFunc(outputs, liInputs, name, ec, computetime);
+
 		if (!LineageCacheConfig.isMultiLevelReuse())
 			return;
 
@@ -355,7 +381,7 @@ public class LineageCache
 		// Create a new entry.
 		LineageCacheEntry newItem = new LineageCacheEntry(key, dt, Mval, Sval, computetime);
 		
-		// Make space by removing or spilling LRU entries.
+		// Make space by removing or spilling entries.
 		if( Mval != null || Sval != null ) {
 			long size = newItem.getSize();
 			if( size > LineageCacheEviction.getCacheLimit())
@@ -377,10 +403,13 @@ public class LineageCache
 		// This method is called only when entry is present either in cache or in local FS.
 		LineageCacheEntry e = _cache.get(key);
 		if (e != null && e.getCacheStatus() != LineageCacheStatus.SPILLED) {
+			if (DMLScript.STATISTICS) {
+				// Increment hit count and saved computation time.
+				LineageCacheStatistics.incrementMemHits();
+				LineageCacheStatistics.incrementSavedComputeTime(e._computeTime);
+			}
 			// Maintain order for eviction
 			LineageCacheEviction.getEntry(e);
-			if (DMLScript.STATISTICS)
-				LineageCacheStatistics.incrementMemHits();
 			return e;
 		}
 		else
@@ -411,6 +440,10 @@ public class LineageCache
 				e._nextEntry = oe._nextEntry;
 				oe._nextEntry = e;
 			}
+
+			if (DMLScript.STATISTICS && LineageCacheEviction._removelist.containsKey(e._key))
+				// Add to missed compute time
+				LineageCacheStatistics.incrementMissedComputeTime(e._computeTime);
 			
 			//maintain order for eviction
 			LineageCacheEviction.addEntry(e);

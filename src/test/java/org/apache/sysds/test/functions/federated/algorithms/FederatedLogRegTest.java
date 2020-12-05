@@ -57,7 +57,9 @@ public class FederatedLogRegTest extends AutomatedTestBase {
 	@Parameterized.Parameters
 	public static Collection<Object[]> data() {
 		// rows have to be even and > 1
-		return Arrays.asList(new Object[][] {{10000, 10}, {1000, 100}, {2000, 43}});
+		return Arrays.asList(new Object[][] {
+			// {10000, 10}, {1000, 100},
+			{2000, 43}});
 	}
 
 	@Test
@@ -93,12 +95,11 @@ public class FederatedLogRegTest extends AutomatedTestBase {
 		fullDMLScriptName = "";
 		int port1 = getRandomAvailablePort();
 		int port2 = getRandomAvailablePort();
-		Thread t1 = startLocalFedWorkerThread(port1);
+		Thread t1 = startLocalFedWorkerThread(port1, FED_WORKER_WAIT_S);
 		Thread t2 = startLocalFedWorkerThread(port2);
 
 		TestConfiguration config = availableTestConfigurations.get(TEST_NAME);
 		loadTestConfiguration(config);
-		
 
 		// Run reference dml script with normal matrix
 		fullDMLScriptName = HOME + TEST_NAME + "Reference.dml";

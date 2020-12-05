@@ -39,7 +39,8 @@ public class LineageCacheConfig
 		"rightIndex", "leftIndex", "groupedagg", "r'", "solve", "spoof",
 		"uamean", "max", "min", "ifelse", "-", "sqrt", ">", "uak+", "<=",
 		"^", "uamax", "uark+", "uacmean", "eigen", "ctableexpand", "replace",
-		"^2", "uack+", "tak+*", "uacsqk+", "uark+", "n+", "uarimax", "qsort", "qpick"
+		"^2", "uack+", "tak+*", "uacsqk+", "uark+", "n+", "uarimax", "qsort", 
+		"qpick", "transformapply", "uarmax", "n+", "-*", "castdtm"
 		//TODO: Reuse everything. 
 	};
 	private static String[] REUSE_OPCODES  = new String[] {};
@@ -69,19 +70,23 @@ public class LineageCacheConfig
 	private static CachedItemHead _itemH = null;
 	private static CachedItemTail _itemT = null;
 	private static boolean _compilerAssistedRW = false;
+	private static boolean _onlyEstimate = false;
 
 	//-------------DISK SPILLING RELATED CONFIGURATIONS--------------//
 
 	private static boolean _allowSpill = false;
 	// Minimum reliable spilling estimate in milliseconds.
-	public static final double MIN_SPILL_TIME_ESTIMATE = 100;
+	public static final double MIN_SPILL_TIME_ESTIMATE = 10;
 	// Minimum reliable data size for spilling estimate in MB.
-	public static final double MIN_SPILL_DATA = 20;
+	public static final double MIN_SPILL_DATA = 2;
 	// Default I/O in MB per second for binary blocks
-	public static double FSREAD_DENSE = 200;
-	public static double FSREAD_SPARSE = 100;
-	public static double FSWRITE_DENSE = 150;
-	public static double FSWRITE_SPARSE = 75;
+	// NOTE: These defaults are tuned according to high
+	// speed disks, so that spilling starts early. These 
+	// will anyway be adjusted as per the current disk.
+	public static double FSREAD_DENSE = 500;
+	public static double FSREAD_SPARSE = 400;
+	public static double FSWRITE_DENSE = 450;
+	public static double FSWRITE_SPARSE = 225;
 	
 	private enum CachedItemHead {
 		TSMM,
@@ -99,7 +104,7 @@ public class LineageCacheConfig
 
 	private static LineageCachePolicy _cachepolicy = null;
 	// Weights for scoring components (computeTime/size, LRU timestamp)
-	protected static double[] WEIGHTS = {0, 1};
+	protected static double[] WEIGHTS = {0, 1, 0};
 
 	protected enum LineageCacheStatus {
 		EMPTY,     //Placeholder with no data. Cannot be evicted.
@@ -117,13 +122,48 @@ public class LineageCacheConfig
 	public enum LineageCachePolicy {
 		LRU,
 		COSTNSIZE,
+		DAGHEIGHT,
 		HYBRID;
 	}
 	
 	protected static Comparator<LineageCacheEntry> LineageCacheComparator = (e1, e2) -> {
-		return e1.score == e2.score ?
+		/*return e1.score == e2.score ?
 			Long.compare(e1._key.getId(), e2._key.getId()) :
 			e1.score < e2.score ? -1 : 1;
+		*/
+		int ret = 0;
+		if (e1.score == e2.score) {
+			switch(_cachepolicy) {
+				case LRU:
+				case DAGHEIGHT:
+				{
+					// order entries with same score by cost, size ratio
+					double e1_cs = e1.getCostNsize();
+					double e2_cs = e2.getCostNsize();
+					ret = e1_cs == e2_cs ?
+						Long.compare(e1._key.getId(), e2._key.getId()) :
+						e1_cs < e2_cs ? -1 : 1;
+					break;
+				}
+				case COSTNSIZE:
+				{
+					// order entries with same score by last used time
+					double e1_ts = e1.getTimestamp();
+					double e2_ts = e2.getTimestamp();
+					ret = e1_ts == e2_ts ?
+						Long.compare(e1._key.getId(), e2._key.getId()) :
+						e1_ts < e2_ts ? -1 : 1;
+					break;
+				}
+				case HYBRID:
+					// order entries with same score by IDs
+					ret = Long.compare(e1._key.getId(), e2._key.getId());
+			}
+		}
+		else
+			ret = e1.score < e2.score ? -1 : 1;
+
+		return ret;
 	};
 
 	//----------------------------------------------------------------//
@@ -149,6 +189,7 @@ public class LineageCacheConfig
 			&& !(inst instanceof ListIndexingCPInstruction);
 		boolean rightop = (ArrayUtils.contains(REUSE_OPCODES, inst.getOpcode())
 			|| (inst.getOpcode().equals("append") && isVectorAppend(inst, ec))
+			|| (inst.getOpcode().startsWith("spoof"))
 			|| (inst instanceof DataGenCPInstruction) && ((DataGenCPInstruction) inst).isMatrixCall());
 		boolean updateInplace = (inst instanceof MatrixIndexingCPInstruction)
 			&& ec.getMatrixObject(((ComputationCPInstruction)inst).input1).getUpdateType().isInPlace();
@@ -217,17 +258,21 @@ public class LineageCacheConfig
 	public static void setCachePolicy(LineageCachePolicy policy) {
 		switch(policy) {
 			case LRU:
-				WEIGHTS[0] = 0; WEIGHTS[1] = 1;
+				WEIGHTS[0] = 0; WEIGHTS[1] = 1; WEIGHTS[2] = 0;
 				break;
 			case COSTNSIZE:
-				WEIGHTS[0] = 1; WEIGHTS[1] = 0;
+				WEIGHTS[0] = 1; WEIGHTS[1] = 0; WEIGHTS[2] = 0;
+				break;
+			case DAGHEIGHT:
+				WEIGHTS[0] = 0; WEIGHTS[1] = 0; WEIGHTS[2] = 1;
 				break;
 			case HYBRID:
-				WEIGHTS[0] = 1; WEIGHTS[1] = 0.0033;
+				WEIGHTS[0] = 1; WEIGHTS[1] = 0.0033; WEIGHTS[2] = 0;
 				// FIXME: Relative timestamp fix reduces the absolute
 				// value of the timestamp component of the scoring function
 				// to a comparatively much smaller number. W[1] needs to be
 				// re-tuned accordingly.
+				// FIXME: Tune hybrid with a ratio of all three.
 				// TODO: Automatic tuning of weights.
 				break;
 		}
@@ -238,9 +283,26 @@ public class LineageCacheConfig
 		return _cachepolicy;
 	}
 	
+	public static void setEstimator(boolean onlyEstimator) { 
+		_onlyEstimate = onlyEstimator;
+	}
+	
+	public static boolean isEstimator() {
+		return _onlyEstimate;
+	}
+	
 	public static boolean isTimeBased() {
 		// Check the LRU component of weights array.
 		return (WEIGHTS[1] > 0);
+	}
+	
+	public static boolean isCostNsize() {
+		return (WEIGHTS[0] > 0);
+	}
+
+	public static boolean isDagHeightBased() {
+		// Check the DAGHEIGHT component of weights array.
+		return (WEIGHTS[2] > 0);
 	}
 
 	public static void setSpill(boolean toSpill) {

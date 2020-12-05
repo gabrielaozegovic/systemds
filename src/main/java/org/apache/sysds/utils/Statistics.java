@@ -34,6 +34,7 @@ import java.util.concurrent.atomic.LongAdder;
 
 import org.apache.sysds.api.DMLScript;
 import org.apache.sysds.conf.ConfigurationManager;
+import org.apache.sysds.conf.DMLConfig;
 import org.apache.sysds.hops.OptimizerUtils;
 import org.apache.sysds.runtime.controlprogram.caching.CacheStatistics;
 import org.apache.sysds.runtime.controlprogram.context.SparkExecutionContext;
@@ -968,8 +969,8 @@ public class Statistics
 						String.format("%.3f", examSparsityTime*1e-9) + "/" + String.format("%.3f", allocateDoubleArrTime*1e-9)  + ".\n");
 			}
 
-			sb.append("Cache hits (Mem, WB, FS, HDFS):\t" + CacheStatistics.displayHits() + ".\n");
-			sb.append("Cache writes (WB, FS, HDFS):\t" + CacheStatistics.displayWrites() + ".\n");
+			sb.append("Cache hits (Mem/Li/WB/FS/HDFS):\t" + CacheStatistics.displayHits() + ".\n");
+			sb.append("Cache writes (Li/WB/FS/HDFS):\t" + CacheStatistics.displayWrites() + ".\n");
 			sb.append("Cache times (ACQr/m, RLS, EXP):\t" + CacheStatistics.displayTime() + " sec.\n");
 			if (DMLScript.JMLC_MEM_STATISTICS)
 				sb.append("Max size of live objects:\t" + byteCountToDisplaySize(getSizeofPinnedObjects()) + " ("  + getNumPinnedObjects() + " total objects)" + "\n");
@@ -983,7 +984,8 @@ public class Statistics
 				sb.append("LinCache hits (Mem/FS/Del): \t" + LineageCacheStatistics.displayHits() + ".\n");
 				sb.append("LinCache MultiLevel (Ins/SB/Fn):" + LineageCacheStatistics.displayMultiLevelHits() + ".\n");
 				sb.append("LinCache writes (Mem/FS/Del): \t" + LineageCacheStatistics.displayWtrites() + ".\n");
-				sb.append("LinCache FStimes (Rd/Wr): \t" + LineageCacheStatistics.displayTime() + " sec.\n");
+				sb.append("LinCache FStimes (Rd/Wr): \t" + LineageCacheStatistics.displayFSTime() + " sec.\n");
+				sb.append("LinCache Computetime (S/M): \t" + LineageCacheStatistics.displayComputeTime() + " sec.\n");
 				sb.append("LinCache Rewrites:    \t\t" + LineageCacheStatistics.displayRewrites() + ".\n");
 			}
 			if( ConfigurationManager.isCodegenEnabled() ) {
@@ -1034,6 +1036,10 @@ public class Statistics
 				sb.append("Federated Execute (Inst, UDF):\t" +
 					federatedExecuteInstructionCount.longValue() + "/" +
 					federatedExecuteUDFCount.longValue() + ".\n");
+			}
+
+			if( ConfigurationManager.getDMLConfig().getTextValue(DMLConfig.COMPRESSED_LINALG).contains("true")){
+				DMLCompressionStatistics.display(sb);
 			}
 
 			sb.append("Total JIT compile time:\t\t" + ((double)getJITCompileTime())/1000 + " sec.\n");

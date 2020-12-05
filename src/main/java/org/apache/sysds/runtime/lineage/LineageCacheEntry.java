@@ -19,6 +19,8 @@
 
 package org.apache.sysds.runtime.lineage;
 
+import java.util.Map;
+
 import org.apache.sysds.common.Types.DataType;
 import org.apache.sysds.runtime.DMLRuntimeException;
 import org.apache.sysds.runtime.instructions.cp.ScalarObject;
@@ -138,15 +140,48 @@ public class LineageCacheEntry {
 		recomputeScore();
 	}
 	
+	protected synchronized void computeScore(Map<LineageItem, Integer> removeList) {
+		setTimestamp();
+		if (removeList.containsKey(_key)) {
+			//FIXME: increase computetime instead of score (that now leads to overflow).
+			// updating computingtime seamlessly takes care of spilling 
+			//_computeTime = _computeTime * (1 + removeList.get(_key));
+			score = score * (1 + removeList.get(_key));
+		}
+		if (_computeTime < 0)
+			System.out.println("after recache: "+_computeTime+" miss count: "+removeList.get(_key));
+	}
+	
+	protected synchronized void updateComputeTime() {
+		if ((Long.MAX_VALUE - _computeTime) < _computeTime) {
+			System.out.println("Overflow for: "+_key.getOpcode());
+		}
+		//FIXME: increase computetime instead of score (that now leads to overflow).
+		// updating computingtime seamlessly takes care of spilling 
+		//_computeTime = _computeTime * (1 + removeList.get(_key));
+		//_computeTime += _computeTime;
+		//recomputeScore();
+		score *= 2;
+	}
+	
 	protected synchronized long getTimestamp() {
 		return _timestamp;
+	}
+	
+	protected synchronized long getDagHeight() {
+		return _key.getDistLeaf2Node();
+	}
+	
+	protected synchronized double getCostNsize() {
+		return ((double)_computeTime)/getSize();
 	}
 	
 	private void recomputeScore() {
 		// Gather the weights for scoring components
 		double w1 = LineageCacheConfig.WEIGHTS[0];
 		double w2 = LineageCacheConfig.WEIGHTS[1];
+		double w3 = LineageCacheConfig.WEIGHTS[2];
 		// Generate scores
-		score = w1*(((double)_computeTime)/getSize()) + w2*getTimestamp();
+		score = w1*(((double)_computeTime)/getSize()) + w2*getTimestamp() + w3*(((double)1)/getDagHeight());
 	}
 }

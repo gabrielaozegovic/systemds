@@ -48,8 +48,13 @@ public class BuiltinSmoteTest extends AutomatedTestBase {
 	}
 
 	@Test
+	public void testSmote0CP() {
+		runSmoteTest(100, 1, LopProperties.ExecType.CP);
+	}
+
+	@Test
 	public void testSmote1CP() {
-		runSmoteTest(300, 3, LopProperties.ExecType.CP);
+		runSmoteTest(300, 10, LopProperties.ExecType.CP);
 	}
 
 	@Test
@@ -87,7 +92,7 @@ public class BuiltinSmoteTest extends AutomatedTestBase {
 			writeInputMatrixWithMTD("T", T, true);
 
 			runTest(true, false, null, -1);
-			HashMap<MatrixValue.CellIndex, Double> value = readDMLMatrixFromHDFS("Sum");
+			HashMap<MatrixValue.CellIndex, Double> value = readDMLMatrixFromOutputDir("Sum");
 			Assert.assertEquals("synthetic samples does not fall into minority class cluster",1,
 				value.get(new MatrixValue.CellIndex(1,1)), 0.000001);
 		}

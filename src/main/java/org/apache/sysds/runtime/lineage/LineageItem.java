@@ -33,6 +33,7 @@ public class LineageItem {
 	private final String _data;
 	private final LineageItem[] _inputs;
 	private int _hash = 0;
+	private long _distLeaf2Node;
 	// init visited to true to ensure visited items are
 	// not hidden when used as inputs to new items
 	private boolean _visited = true;
@@ -84,6 +85,8 @@ public class LineageItem {
 		// materialize hash on construction 
 		// (constant time operation if input hashes constructed)
 		_hash = hashCode();
+		// store the distance of this node from the leaves. (O(#inputs)) operation
+		_distLeaf2Node = distLeaf2Node();
 	}
 	
 	public LineageItem[] getInputs() {
@@ -99,6 +102,11 @@ public class LineageItem {
 		return _data;
 	}
 	
+	public void fixHash() {
+		_hash = 0;
+		_hash = hashCode();
+	}
+
 	public boolean isVisited() {
 		return _visited;
 	}
@@ -111,12 +119,39 @@ public class LineageItem {
 		_visited = flag;
 	}
 	
+	private long distLeaf2Node() {
+		// Derive height only if the corresponding reuse
+		// policy is selected, otherwise set -1.
+		if (LineageCacheConfig.ReuseCacheType.isNone()
+			|| !LineageCacheConfig.isDagHeightBased())
+			return -1;
+
+		if (_inputs != null && _inputs.length > 0) {
+			// find the input with highest height
+			long maxDistance = _inputs[0].getDistLeaf2Node();
+			for (int i=1; i<_inputs.length; i++)
+				if (_inputs[i].getDistLeaf2Node() > maxDistance)
+					maxDistance = _inputs[i].getDistLeaf2Node();
+			return maxDistance + 1;
+		}
+		else
+			return 1;  //leaf node
+	}
+	
 	public long getId() {
 		return _id;
 	}
 	
 	public String getOpcode() {
 		return _opcode;
+	}
+	
+	public void setDistLeaf2Node(long d) {
+		_distLeaf2Node = d;
+	}
+	
+	public long getDistLeaf2Node() {
+		return _distLeaf2Node;
 	}
 	
 	public LineageItemType getType() {
@@ -143,11 +178,12 @@ public class LineageItem {
 			return false;
 		
 		resetVisitStatusNR();
-		boolean ret = equalsLI((LineageItem) o);
+		boolean ret = equalsLINR((LineageItem) o);
 		resetVisitStatusNR();
 		return ret;
 	}
 	
+	@SuppressWarnings("unused")
 	private boolean equalsLI(LineageItem that) {
 		if (isVisited() || this == that)
 			return true;
@@ -160,6 +196,33 @@ public class LineageItem {
 				ret &= _inputs[i].equalsLI(that._inputs[i]);
 		
 		setVisited();
+		return ret;
+	}
+	
+	private boolean equalsLINR(LineageItem that) {
+		Stack<LineageItem> s1 = new Stack<>();
+		Stack<LineageItem> s2 = new Stack<>();
+		s1.push(this);
+		s2.push(that);
+		boolean ret = false;
+		while (!s1.empty() && !s2.empty()) {
+			LineageItem li1 = s1.pop();
+			LineageItem li2 = s2.pop();
+			if (li1.isVisited() || li1 == li2)
+				return true;
+
+			ret = li1._opcode.equals(li2._opcode);
+			ret &= li1._data.equals(li2._data);
+			ret &= (li1.hashCode() == li2.hashCode());
+			if (!ret) break;
+			if (ret && li1._inputs != null && li1._inputs.length == li2._inputs.length)
+				for (int i=0; i<li1._inputs.length; i++) {
+					s1.push(li1.getInputs()[i]);
+					s2.push(li2.getInputs()[i]);
+				}
+			li1.setVisited();
+		}
+		
 		return ret;
 	}
 	
